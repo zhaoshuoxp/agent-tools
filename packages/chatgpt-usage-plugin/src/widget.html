@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Usage Meter</title>
+  <style>/* STYLES */</style>
+</head>
+<body>
+  <main aria-label="Account usage">
+    <header>
+      <div><p class="eyebrow">CHATGPT WORK / CODEX</p><h1>Usage Meter</h1></div>
+      <button id="refresh" class="icon-button" type="button" aria-label="Refresh usage" title="Refresh usage" disabled>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5M6.1 7a7 7 0 0 1 11.6-1L20 9M4 15l2.3 3A7 7 0 0 0 18 17"/></svg>
+      </button>
+    </header>
+    <div class="status-row"><span id="status" role="status">Connecting…</span><span id="updated"></span></div>
+    <p id="error" class="error" role="alert" hidden></p>
+    <div id="buckets"><p class="empty">Reading your current usage…</p></div>
+    <button id="pin" class="pin-button" type="button" disabled>Show beside conversation context</button>
+    <p id="pin-note" class="note">The summary includes its last update time.</p>
+    <footer>Updates every minute while this view is open. Uses the current local account.</footer>
+  </main>
+  <script type="module">/* SCRIPT */</script>
+</body>
+</html>

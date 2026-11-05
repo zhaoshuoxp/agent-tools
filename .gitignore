@@ -1,0 +1,12 @@
+.DS_Store
+Thumbs.db
+node_modules/
+npm-debug.log*
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+id_rsa
+id_ed25519
+auth.json

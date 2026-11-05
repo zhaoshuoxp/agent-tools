@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "ssh-shortcut": {
+      "command": "/bin/bash",
+      "args": ["./scripts/start-server.sh"],
+      "cwd": "."
+    }
+  }
+}

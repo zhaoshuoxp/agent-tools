@@ -1,0 +1,21 @@
+{
+  "name": "usage-meter",
+  "version": "1.1.2",
+  "description": "Show a quota ring and reset-time title on the native Usage Meter sidebar entrypoint.",
+  "mcpServers": "./.mcp.json",
+  "interface": {
+    "displayName": "Usage Meter",
+    "shortDescription": "A quota ring for the ChatGPT sidebar",
+    "longDescription": "The sidebar entrypoint advertises a bold quota ring with a local reset-date caption. Its title includes full reset times and the reading timestamp. The icon supports monochrome host rendering. Updated metadata uses official MCP change notifications.",
+    "category": "Productivity",
+    "capabilities": [
+      "Interactive",
+      "Read"
+    ],
+    "composerIcon": "./assets/icon.svg",
+    "logo": "./assets/icon.svg",
+    "defaultPrompt": [
+      "Open Usage Meter and show my current usage limits."
+    ]
+  }
+}

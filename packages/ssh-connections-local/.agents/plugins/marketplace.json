@@ -1,0 +1,20 @@
+{
+  "name": "ssh-connections-local",
+  "interface": {
+    "displayName": "SSH Connections Local"
+  },
+  "plugins": [
+    {
+      "name": "ssh-shortcut",
+      "source": {
+        "source": "local",
+        "path": "./plugins/ssh-shortcut"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

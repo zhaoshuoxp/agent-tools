@@ -1,0 +1,17 @@
+{
+  "name": "ssh-shortcut",
+  "version": "1.0.2",
+  "description": "Open the ChatGPT desktop app's SSH connection settings from its sidebar.",
+  "mcpServers": "./.mcp.json",
+  "requires_local_executor": true,
+  "interface": {
+    "displayName": "SSH Connections",
+    "shortDescription": "Open SSH settings in one click",
+    "longDescription": "A local sidebar shortcut to Settings > Connections > SSH. Manage each host using the app's own switches.",
+    "category": "Productivity",
+    "capabilities": ["Interactive"],
+    "composerIcon": "./assets/icon.svg",
+    "logo": "./assets/icon.svg",
+    "defaultPrompt": ["Open SSH connection settings."]
+  }
+}
