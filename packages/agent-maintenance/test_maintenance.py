@@ -23,6 +23,7 @@ PARENT = "00000000-0000-4000-8000-000000000001"
 CHILD = "00000000-0000-4000-8000-000000000002"
 CLAUDE = "00000000-0000-4000-8000-000000000003"
 ATTACHMENT = "00000000-0000-4000-8000-000000000004"
+CODEX_MAIN = "00000000-0000-4000-8000-000000000005"
 
 
 class MaintenanceTests(unittest.TestCase):
@@ -94,6 +95,92 @@ class MaintenanceTests(unittest.TestCase):
         with path.open("wb") as handle:
             host.backup(selector, handle)
         return client.verify_backup(path)
+
+    def add_mixed_sources(self):
+        path = self.codex / ("sessions/rollout-" + CODEX_MAIN + ".jsonl")
+        path.write_text(json.dumps({"type": "session_meta", "payload": {"id": CODEX_MAIN, "cwd": str(self.project),
+                                                                        "originator": "Codex Desktop"}}) + "\n")
+        os.utime(path, (self.age, self.age))
+        with contextlib.closing(sqlite3.connect(self.database)) as database:
+            database.execute("alter table threads add column originator text")
+            database.execute("update threads set originator='Codex Desktop'")
+            database.execute("update threads set originator='codex_work_desktop' where id=?", (PARENT,))
+            database.execute("insert into threads values(?,?,?,?,?,?,?,?,?,?)", (CODEX_MAIN, str(path), int(self.age),
+                             int(self.age), str(self.project), "Coding session", "vscode", 0, "user", "Codex Desktop"))
+            database.commit()
+
+    def test_work_source_is_identified_and_descendants_inherit_the_source(self):
+        self.add_mixed_sources()
+        data = host.inventory()
+        work = host.selected_sessions(data, {"surface": "chatgpt-work"}, expand=True)
+        self.assertEqual({row["id"] for row in work}, {PARENT, CHILD})
+        self.assertTrue(all(row["tool"] == "codex" for row in work))
+        self.assertTrue(all(row["surface_label"] == "ChatGPT Work (local)" for row in work))
+        coding = host.selected_sessions(data, {"surface": "codex"}, expand=False)
+        self.assertEqual([row["id"] for row in coding], [CODEX_MAIN])
+        self.assertEqual(data["diagnostics"]["surfaces"]["chatgpt-work"]["main_records"], 1)
+
+    def test_work_backup_preserves_media_and_stays_separate_from_coding_sessions(self):
+        self.add_mixed_sources()
+        proof = self.make_backup({"project": str(self.project), "surface": "chatgpt-work"})
+        self.assertEqual({row["id"] for row in proof["manifest"]["sessions"]}, {PARENT, CHILD})
+        names = {item["name"] for item in proof["manifest"]["files"]}
+        self.assertIn("files/codex/attachments/" + ATTACHMENT + "/image.png", names)
+        self.assertIn("files/codex/generated_images/" + PARENT + "/generated.png", names)
+
+    def test_work_archive_uses_the_codex_native_command(self):
+        self.add_mixed_sources()
+        plan = host.make_plan({"operation": "archive", "selector": {"sessions": [PARENT], "surface": "chatgpt-work"}})
+        def archive(arguments, **kwargs):
+            self.assertEqual(arguments[:2], ["/fixture/codex", "archive"])
+            self.assertIn(arguments[2], (PARENT, CHILD))
+            with contextlib.closing(sqlite3.connect(self.database)) as database:
+                database.execute("update threads set archived=1 where id=?", (arguments[2],))
+                database.commit()
+            return subprocess.CompletedProcess(arguments, 0, stdout="Archived", stderr="")
+        with mock.patch.object(host, "find_cli", return_value="/fixture/codex"), \
+                mock.patch.object(host.subprocess, "run", side_effect=archive) as native:
+            result = host.apply_plan({"plan": plan, "confirm": plan["plan_id"]})
+        self.assertEqual(native.call_count, 2)
+        self.assertTrue(result["all_verified"])
+        self.assertTrue(self.claude_path.exists())
+
+    def test_mixed_project_remains_one_group_with_source_counts(self):
+        self.add_mixed_sources()
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(client.main(["projects", "--host", "local", "--json"]), 0)
+        groups = json.loads(output.getvalue())["projects"]
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(groups[0]["surfaces"], {"chatgpt-work": 2, "codex": 1, "claude": 1})
+
+    def test_desktop_project_unifies_work_and_codex_from_different_folders(self):
+        self.add_mixed_sources()
+        project_id = "example-desktop-project"
+        metadata = {"local-projects": {project_id: {"id": project_id, "name": "Unified desktop project",
+                                                   "rootPaths": [str(self.project)]}},
+                    "thread-project-assignments": {sid: {"projectKind": "local", "projectId": project_id}
+                                                   for sid in (PARENT, CODEX_MAIN)}}
+        (self.codex / ".codex-global-state.json").write_text(json.dumps(metadata))
+        with contextlib.closing(sqlite3.connect(self.database)) as database:
+            database.execute("update threads set cwd=? where id=?", (str(self.base / "AnotherFolder"), CODEX_MAIN))
+            database.commit()
+        rows = host.selected_sessions(host.inventory(), {"project": project_id}, expand=True)
+        self.assertEqual({row["id"] for row in rows}, {PARENT, CHILD, CODEX_MAIN})
+        self.assertEqual({row["project"] for row in rows}, {"Unified desktop project"})
+        self.assertEqual({row["project_path"] for row in rows}, {str(self.project)})
+        self.assertEqual({row["surface"] for row in rows}, {"codex", "chatgpt-work"})
+
+    def test_work_cleanup_explains_the_shared_store_and_excludes_claude(self):
+        log = self.codex / "log/old.log"
+        log.parent.mkdir()
+        log.write_text("old log")
+        os.utime(log, (self.age, self.age))
+        plan = host.make_plan({"operation": "cleanup", "selector": {"surface": "chatgpt-work"},
+                               "categories": ["logs"], "days": 30})
+        self.assertEqual(plan["tool"], "codex")
+        self.assertIn("share", plan["scope_note"])
+        self.assertEqual([item["path"] for item in plan["items"]], [str(log)])
 
     def test_parent_metadata_expands_guardian_children_without_database_edges(self):
         inventory = host.inventory()

@@ -8,6 +8,8 @@ struct Conversation: Identifiable {
     let id: String
     let uuid: String
     let tool: String
+    let surface: String
+    let sourceLabel: String
     let title: String
     let project: String
     let projectKey: String
@@ -18,10 +20,12 @@ struct Conversation: Identifiable {
     init(_ value: [String: Any]) {
         uuid = value["id"] as? String ?? ""
         tool = value["tool"] as? String ?? ""
+        surface = value["surface"] as? String ?? tool
+        sourceLabel = value["surface_label"] as? String ?? tool.capitalized
         id = tool + ":" + uuid
         title = value["title"] as? String ?? uuid
         project = value["project"] as? String ?? ""
-        projectKey = value["project_path"] as? String ?? value["cwd"] as? String ?? value["project_id"] as? String ?? project
+        projectKey = value["project_id"] as? String ?? value["project_path"] as? String ?? value["cwd"] as? String ?? project
         archived = value["archived"] as? Bool ?? false
         busy = value["busy"] as? Bool ?? false
         isSubagent = value["is_subagent"] as? Bool ?? false
@@ -171,7 +175,7 @@ final class MaintenanceModel: ObservableObject {
     @Published var selection = Set<String>()
     @Published var project = ""
     @Published var query = ""
-    @Published var tool = "all"
+    @Published var source = "all"
     @Published var state = "all"
     @Published var busy = false
     @Published var report = "Select a host and refresh to inspect its conversations."
@@ -240,7 +244,7 @@ final class MaintenanceModel: ObservableObject {
 
     var visible: [Conversation] {
         conversations.filter { row in
-            (project.isEmpty || row.projectKey == project) && (tool == "all" || row.tool == tool) &&
+            (project.isEmpty || row.projectKey == project) && (source == "all" || row.surface == source) &&
             (state == "all" || row.archived == (state == "archived")) &&
             (query.isEmpty || (row.title + " " + row.project + " " + row.uuid).localizedCaseInsensitiveContains(query))
         }
@@ -291,17 +295,20 @@ final class MaintenanceModel: ObservableObject {
         let claude = value["claude"] as? [String: Any] ?? [:]
         let codexCount = codex["total_records"] as? Int ?? 0
         let claudeCount = claude["total_records"] as? Int ?? 0
+        let surfaces = value["surfaces"] as? [String: [String: Any]] ?? [:]
+        let codingCount = surfaces["codex"]?["total_records"] as? Int ?? codexCount
+        let workCount = surfaces["chatgpt-work"]?["total_records"] as? Int ?? 0
         let recordHost = value["hostname"] as? String ?? host
         if host == "local" { executionHost = recordHost }
-        sourceSummary = "Codex: \(codexCount) records  ·  Claude: \(claudeCount) records"
-        sourceDetail = "App computer: \(executionHost)  ·  Record host: \(recordHost)\nCodex: \(codex["root"] as? String ?? "Unknown")\nClaude: \(claude["root"] as? String ?? "Unknown")"
+        sourceSummary = "Codex: \(codingCount) records  ·  ChatGPT Work (local): \(workCount)  ·  Claude: \(claudeCount)"
+        sourceDetail = "App computer: \(executionHost)  ·  Record host: \(recordHost)\nCodex / local Work: \(codex["root"] as? String ?? "Unknown")\nClaude: \(claude["root"] as? String ?? "Unknown")\nCloud Work history is outside this local scan."
         let errors = value["errors"] as? [[String: Any]] ?? []
         if !errors.isEmpty {
             scanNotice = errors.compactMap { $0["error"] as? String }.joined(separator: "; ")
         } else if codexCount == 0 {
-            scanNotice = "No Codex records found at \(codex["root"] as? String ?? "the selected directory"). Check Sources & SSH."
+            scanNotice = "No Codex or local Work records found at \(codex["root"] as? String ?? "the selected directory"). Check Sources & SSH."
         } else if (codex["subagent_records"] as? Int ?? 0) == codexCount && codexCount > 0 {
-            scanNotice = "This host contains Codex subagent records only. Orphan records are listed; Include subagents shows every record."
+            scanNotice = "This host contains Codex / Work subagent records only. Orphan records are listed; Include subagents shows every record."
         } else if (codex["visible_records"] as? Int ?? 0) == 0 && !includeSubagents {
             scanNotice = "Codex records are present. Enable Include subagents to show records hidden by the conversation filter."
         } else {
@@ -326,7 +333,7 @@ final class MaintenanceModel: ObservableObject {
     }
     func chooseDirectory(codex: Bool) {
         let panel = NSOpenPanel()
-        panel.title = codex ? "Choose the Codex data home" : "Choose the Claude data home"
+        panel.title = codex ? "Choose the Codex / local Work data home" : "Choose the Claude data home"
         panel.canChooseDirectories = true
         panel.canChooseFiles = false
         panel.showsHiddenFiles = true
@@ -414,10 +421,10 @@ final class MaintenanceModel: ObservableObject {
     private func scope(projectOnly: Bool = false) -> [String]? {
         if projectOnly {
             guard !project.isEmpty else { appendLog("Choose one project first."); return nil }
-            return ["--project", project, "--tool", tool]
+            return ["--project", project, "--surface", source]
         }
         guard !selectedRows.isEmpty else { appendLog("Select one or more conversations first."); return nil }
-        return selectedRows.flatMap { ["--session", $0.uuid] } + ["--tool", tool]
+        return selectedRows.flatMap { ["--session", $0.uuid] } + ["--surface", source]
     }
     private func chooseBackup() -> URL? {
         let panel = NSOpenPanel()
@@ -436,9 +443,9 @@ final class MaintenanceModel: ObservableObject {
         run(["backup", "--host", host] + selection + ["--output", url.path], label: "Backing up and verifying")
     }
     func plan(_ operation: String) {
-        var arguments = ["plan", operation, "--host", host, "--tool", tool]
+        var arguments = ["plan", operation, "--host", host]
         if operation == "cleanup" {
-            arguments += ["--category", "logs", "--category", "temp", "--older-than", String(cleanupDays)]
+            arguments += ["--surface", source, "--category", "logs", "--category", "temp", "--older-than", String(cleanupDays)]
         } else {
             guard let selected = scope() else { return }
             arguments += selected
@@ -459,8 +466,8 @@ final class MaintenanceModel: ObservableObject {
             let titles = sessions.prefix(8).compactMap { $0["title"] as? String }.joined(separator: "\n")
             let note = operation == "delete"
                 ? "Delete permanently removes these conversations and their descendants. Manage any backups separately; no backup is checked by this action."
-                : operation == "cleanup" ? "This removes only the listed eligible log and temporary files."
-                : "Codex uses native archive/unarchive. Claude file archive moves session files between its data home and ~/.claude-archive. Archive keeps transcript bytes and does not require a backup."
+                : operation == "cleanup" ? "This removes only the listed eligible log and temporary files. " + (plan["scope_note"] as? String ?? "")
+                : "Codex and local ChatGPT Work use native archive/unarchive. Claude file archive moves session files between its data home and ~/.claude-archive. Archive keeps transcript bytes and does not require a backup."
             self.confirmationText = "\(operation.capitalized) on \(self.host): \(sessions.count) records including descendants, \(items.count) files, \(Self.size(bytes)).\n\n\(titles)\n\n\(note)"
             self.confirmation = true
         }
@@ -590,16 +597,19 @@ struct MaintenanceView: View {
                     Text("All projects").tag("")
                     ForEach(model.projects, id: \.0) { Text($0.1).tag($0.0) }
                 }.frame(maxWidth: 330)
-                Picker("Tool", selection: $model.tool) {
-                    Text("All").tag("all"); Text("Codex").tag("codex"); Text("Claude").tag("claude")
-                }.frame(width: 155)
+                Picker("Source", selection: $model.source) {
+                    Text("All").tag("all")
+                    Text("Codex").tag("codex")
+                    Text("ChatGPT Work (local)").tag("chatgpt-work")
+                    Text("Claude").tag("claude")
+                }.frame(width: 220)
                 Picker("State", selection: $model.state) {
                     Text("All").tag("all"); Text("Active").tag("active"); Text("Archived").tag("archived")
                 }.frame(width: 175)
                 TextField("Search title, project, or UUID", text: $model.query).textFieldStyle(.roundedBorder)
             }.disabled(model.busy)
             Table(model.visible, selection: $model.selection) {
-                TableColumn("Tool", value: \.tool).width(65)
+                TableColumn("Source", value: \.sourceLabel).width(155)
                 TableColumn("Conversation", value: \.title).width(min: 200)
                 TableColumn("Project", value: \.project).width(min: 90, ideal: 150)
                 TableColumn("Kind") { row in Text(row.isSubagent ? "Subagent" : "Conversation") }.width(95)
@@ -609,7 +619,7 @@ struct MaintenanceView: View {
             HStack {
                 Button("Backup selected") { model.backup(projectOnly: false) }
                 Button("Backup project") { model.backup(projectOnly: true) }
-                Button(model.tool == "claude" ? "File archive" : "Archive") { model.plan("archive") }
+                Button(model.source == "claude" ? "File archive" : "Archive") { model.plan("archive") }
                 Button("Restore archived") { model.plan("unarchive") }
                 Button("Delete") { model.plan("delete") }
                 Spacer()
@@ -628,12 +638,13 @@ struct MaintenanceView: View {
             LogPanel(title: "Operation log", text: model.operationLog, placeholder: "No operations recorded.") {
                 Button("Clear records", action: model.clearOperationLog).disabled(model.busy || model.operationLog.isEmpty)
             }.frame(minHeight: 120, idealHeight: 180, maxHeight: 240)
-            Text("Backups are separate. Codex archive is native; Claude uses a file archive. Completed operation summaries are saved; live output is temporary.")
+            Text("Backups are separate. Codex and local Work archive use the native CLI; Claude uses a file archive. Completed operation summaries are saved; live output is temporary.")
                 .font(.caption).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(18).frame(minWidth: 1040, minHeight: 700)
         .onChange(of: model.host) { model.refresh() }
         .onChange(of: model.includeSubagents) { model.refresh() }
+        .onChange(of: model.source) { model.selection = [] }
         .sheet(isPresented: $model.showSources) { SourceSettingsView(model: model) }
         .sheet(isPresented: $model.showCLIs, onDismiss: model.clearCLILog) { CLIMaintenanceView(model: model) }
         .sheet(isPresented: $model.showDiagnostics) { DiagnosticsView(model: model) }
@@ -779,7 +790,7 @@ private struct SourceSettingsView: View {
             }
             Text("Local data homes").font(.callout.weight(.medium))
             HStack {
-                TextField("Codex home (default: ~/.codex)", text: $model.codexDraft).textFieldStyle(.roundedBorder)
+                TextField("Codex / local Work home (default: ~/.codex)", text: $model.codexDraft).textFieldStyle(.roundedBorder)
                 Button("Choose") { model.chooseDirectory(codex: true) }
             }
             HStack {
@@ -816,8 +827,14 @@ struct AgentMaintenanceApp: App {
                     "python": configuration["python"] as? String ?? "",
                     "codex": diagnostics["codex"] as? [String: Any] ?? [:],
                     "claude": diagnostics["claude"] as? [String: Any] ?? [:],
+                    "surfaces": diagnostics["surfaces"] as? [String: Any] ?? [:],
                     "iconBundled": Bundle.main.url(forResource: "AgentMaintenance", withExtension: "icns") != nil,
                 ]
+                let work = try CLI.execute(["sessions", "--host", "local", "--surface", "chatgpt-work"])
+                let machines = work["hosts"] as? [[String: Any]] ?? []
+                let workRows = machines.first?["sessions"] as? [[String: Any]] ?? []
+                report["work_visible_records"] = workRows.count
+                report["work_native_backend"] = Set(workRows.compactMap { $0["tool"] as? String }).sorted()
                 let temporary = FileManager.default.temporaryDirectory.appendingPathComponent("maintenance-journal-" + UUID().uuidString)
                 try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
                 defer { try? FileManager.default.removeItem(at: temporary) }

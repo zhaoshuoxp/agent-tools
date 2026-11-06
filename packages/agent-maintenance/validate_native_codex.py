@@ -16,7 +16,7 @@ import host
 import agent_maintenance as client
 
 
-def main():
+def validate_case(originator):
     executable = host.find_cli("codex")
     if not executable:
         raise RuntimeError("Codex CLI is required for native validation")
@@ -27,7 +27,7 @@ def main():
         project = root / "ExampleProject"
         project.mkdir()
         environment = dict(os.environ, CODEX_HOME=str(codex_home), CLAUDE_CONFIG_DIR=str(root / ".claude"),
-                           CLAUDE_ARCHIVE_DIR=str(root / ".claude-archive"))
+                           CLAUDE_ARCHIVE_DIR=str(root / ".claude-archive"), CODEX_INTERNAL_ORIGINATOR_OVERRIDE=originator)
         error_log = root / "app-server.log"
         messages = queue.Queue()
         with error_log.open("wb") as errors:
@@ -53,7 +53,7 @@ def main():
                         return response["result"]
                 raise RuntimeError("App-server did not respond")
             try:
-                rpc(1, "initialize", {"clientInfo": {"name": "agent_maintenance_validation", "version": host.VERSION},
+                rpc(1, "initialize", {"clientInfo": {"name": originator, "version": host.VERSION},
                                        "capabilities": {"experimentalApi": True}})
                 process.stdin.write('{"jsonrpc":"2.0","method":"initialized"}\n')
                 process.stdin.flush()
@@ -80,6 +80,10 @@ def main():
         saved_environment = {key: os.environ.get(key) for key in ("CODEX_HOME", "CLAUDE_CONFIG_DIR", "CLAUDE_ARCHIVE_DIR")}
         os.environ.update({key: environment[key] for key in saved_environment})
         try:
+            expected_surface = "chatgpt-work" if originator == "codex_work_desktop" else "codex"
+            fixture = next(row for row in host.inventory()["sessions"] if row["id"] == sid)
+            if fixture["surface"] != expected_surface:
+                raise RuntimeError("The native fixture did not retain its expected conversation source")
             with backup.open("wb") as output:
                 host.backup({"sessions": [sid], "tool": "codex"}, output)
             proof = client.verify_backup(backup)
@@ -100,16 +104,28 @@ def main():
                 print(json.dumps(outcomes[-1]), flush=True)
                 if not result["all_verified"]:
                     raise RuntimeError(json.dumps(result))
+                if operation != "delete":
+                    remaining = next(row for row in host.inventory()["sessions"] if row["id"] == sid)
+                    if remaining["surface"] != expected_surface:
+                        raise RuntimeError("A native operation changed the conversation source")
             report = {"native_codex_validation": "passed", "isolated_home": True, "model_calls": 0,
+                      "surface": expected_surface, "originator": originator,
                       "operations": outcomes, "backup_verified": True}
-            (Path(__file__).parent / "native-codex-validation.json").write_text(json.dumps(report, indent=2) + "\n")
             print(json.dumps(report))
+            return report
         finally:
             for key, value in saved_environment.items():
                 if value is None:
                     os.environ.pop(key, None)
                 else:
                     os.environ[key] = value
+
+
+def main():
+    cases = [validate_case(originator) for originator in ("agent_maintenance_validation", "codex_work_desktop")]
+    report = {"native_validation": "passed", "isolated_homes": True, "model_calls": 0, "cases": cases}
+    (Path(__file__).parent / "native-codex-validation.json").write_text(json.dumps(report, indent=2) + "\n")
+    print(json.dumps(report))
 
 
 if __name__ == "__main__":

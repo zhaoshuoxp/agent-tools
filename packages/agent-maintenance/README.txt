@@ -1,14 +1,19 @@
-Agent Maintenance 0.1.3
+Agent Maintenance 0.1.4
 
 DESKTOP APP
-The separate Agent Maintenance macOS app uses this same CLI. It lists local and SSH hosts, filters conversations by project/tool/archive state, backs up selected conversations or a project, previews archive/unarchive/delete and log/temp cleanup, verifies and restores standalone backups, and checks or applies CLI upgrades. Conversation changes and cleanup show a reviewed plan before confirmation. CLI upgrades require explicit confirmation. The main operation log shows live command output and timestamped results. Configuration JSON is available through Diagnostics. Build a universal app with desktop/build-app.sh OUTPUT_DIRECTORY using a compatible SDK or complete Xcode installation. Python 3 must be available on the Mac and remote hosts. No traffic monitor is installed.
+The separate Agent Maintenance macOS app uses this same CLI. It lists local and SSH hosts, filters conversations by project/source/archive state, backs up selected conversations or a project, previews archive/unarchive/delete and log/temp cleanup, verifies and restores standalone backups, and checks or applies CLI upgrades. Conversation changes and cleanup show a reviewed plan before confirmation. CLI upgrades require explicit confirmation. The main operation log shows live command output and timestamped results. Configuration JSON is available through Diagnostics. Build a universal app with desktop/build-app.sh OUTPUT_DIRECTORY using a compatible SDK or complete Xcode installation. Python 3 must be available on the Mac and remote hosts. No traffic monitor is installed.
 
 Completed operation summaries are saved to ~/Library/Application Support/AgentMaintenance/operations.log, with a bounded history. Clear records removes this history and the current display. Live command output is held in memory. The Remote CLI maintenance log is separate, is never saved by the app, and clears whenever its panel closes. The backend also supports --progress to stream progress to stderr while preserving JSON or backup bytes on stdout.
 
 LEGACY ENTRIES
 install_legacy.py --scripts-dir PATH installs delegates for codex_archives.py and claude_sessions.py while retaining timestamped originals. The Claude delegate preserves --archived and --filter. The Codex delegate starts in the archived-conversation view. legacy_codex_update_server.sh can replace the previous updater beside the installed agent-maintenance launcher; positional SSH aliases still work. It explicitly requests native Codex and Claude upgrades when run. Installing the delegate itself performs no upgrade.
 
-Inspect and maintain local and remote Codex and Claude conversations with Python 3.9+ and OpenSSH. Remote commands stream a small Python engine over SSH; no permanent remote daemon is required. All inventory operations are read-only. Network traffic is not monitored.
+Inspect and maintain Codex, local ChatGPT Work, and Claude conversations with Python 3.9+ and OpenSSH. Remote commands stream a small Python engine over SSH; no permanent remote daemon is required. All inventory operations are read-only. Network traffic is not monitored.
+
+CONVERSATION SOURCES AND PROJECTS
+The Source picker and --surface option distinguish codex, chatgpt-work, and claude; all includes every source. Local Work records use the codex_work_desktop originator marker in the shared Codex store. Descendants inherit the main conversation's source. Cloud Work history is outside the local scanner's scope. The existing --tool codex option selects the storage backend and includes both Codex and local Work; use --surface codex for Codex alone. CLI maintenance still manages the Codex and Claude executables.
+
+Desktop project names and assignments are read from .codex-global-state.json when available. A desktop project ID groups its Codex and Work conversations across attached folders. Working-directory grouping remains available when desktop metadata is absent. Project operations include both sources by default; a source filter narrows the selection.
 
 INSTALL
   python3 install.py
@@ -21,7 +26,9 @@ Hosts come from ~/.config/agent-maintenance/config.json (a JSON object with a ho
 BACK UP A PROJECT OR CONVERSATION
   agent-maintenance projects --host all
   agent-maintenance sessions --host my-server --tool codex --archived all
+  agent-maintenance sessions --host local --surface chatgpt-work
   agent-maintenance backup --host my-server --project /absolute/project/path --output project.zip
+  agent-maintenance backup --host local --project DESKTOP_PROJECT_ID --surface all --output mixed-project.zip
   agent-maintenance backup --host my-server --session CONVERSATION_UUID --output conversation.zip
   agent-maintenance verify conversation.zip
   agent-maintenance restore-files conversation.zip --output restored-files
@@ -40,15 +47,17 @@ ARCHIVE, RESTORE ARCHIVED, OR DELETE
 
 Review the plan before running the printed apply command. Archive and delete use manual backups: neither asks for nor verifies a backup file. The desktop app shows the selected host, conversations, descendants, and size before confirmation. Changed files, active conversations, and altered or expired plans are refused. Plans expire after 24 hours. Broad selection requires explicit --all. No files are removed during a plan. The legacy --backup argument on plan is accepted for compatibility and does not impose backup verification.
 
-Codex operations use the installed CLI's native archive, unarchive, and delete commands. On macOS, CLI discovery also checks standard installation paths and desktop app bundles when Finder provides a minimal PATH. Deletion of a metadata-only record still invokes the native CLI; success requires the record to disappear from inventory. Claude file archive moves complete conversation bundles to ~/.claude-archive/projects, and unarchive moves them back. The app labels this as File archive when Claude is selected. This is a maintenance feature, separate from Claude Desktop's native Archive. The checked server CLI and published SDK do not expose an equivalent archive/unarchive API for these terminal sessions. Archives retain transcript bytes; deleting releases those transcript files. SQLite databases may retain allocated pages, and package runtimes remain installed. Agent Speed daily usage history is independent of source conversation deletion. Its synchronizer removes indexed orphan hard links when the local original has gone.
+Codex and local Work operations use the installed Codex CLI's native archive, unarchive, and delete commands. On macOS, CLI discovery also checks standard installation paths and desktop app bundles when Finder provides a minimal PATH. Deletion of a metadata-only record still invokes the native CLI; success requires the record to disappear from inventory. Claude file archive moves complete conversation bundles to ~/.claude-archive/projects, and unarchive moves them back. The app labels this as File archive when Claude is selected. This is a maintenance feature, separate from Claude Desktop's native Archive. The checked server CLI and published SDK do not expose an equivalent archive/unarchive API for these terminal sessions. Archives retain transcript bytes; deleting releases those transcript files. SQLite databases may retain allocated pages, and package runtimes remain installed. Agent Speed daily usage history is independent of source conversation deletion. Its synchronizer removes indexed orphan hard links when the local original has gone.
 
-Scanning and backups work without an installed Codex or Claude CLI. Codex native archive/unarchive/delete require Codex on the host holding the files, including a supported desktop-bundled CLI on macOS. A local app can manage remote sessions without locally installed CLIs. Missing CLI rows identify the target host; upgrades do not perform first-time installation.
+Scanning and backups work without an installed Codex or Claude CLI. Codex and local Work native archive/unarchive/delete require Codex on the host holding the files, including a supported desktop-bundled CLI on macOS. A local app can manage remote sessions without locally installed CLIs. Missing CLI rows identify the target host; upgrades do not perform first-time installation.
 
 LOGS AND TEMPORARY FILES
   agent-maintenance plan cleanup --host my-server --category logs --category temp --older-than 30 --output cleanup-plan.json
   agent-maintenance apply cleanup-plan.json --confirm FULL_PLAN_ID
 
 Cleanup only considers known log/cache/temp directories and rechecks every file against the current whitelist. It excludes conversation transcripts, databases, credentials, configuration, and installed CLI runtimes. Use inspect to distinguish large sessions, history databases, generated media, logs, and installed runtime releases. Database compaction and runtime release deletion are not performed.
+
+Codex and local Work share their log and temporary folders. Choosing either source limits cleanup to that shared backend; the preview includes this scope note. Conversation backups, archive actions, and deletion use the selected source and conversation IDs.
 
 CLI UPGRADES
   agent-maintenance upgrade
@@ -70,7 +79,7 @@ VALIDATION
   python3 -m unittest -v test_maintenance.py
   python3 validate_native_codex.py
 
-The native validation uses a temporary CODEX_HOME, creates fixture conversations without model calls, and exercises archive, unarchive, and delete without backup prerequisites. Normal tests cover backup bytes/media/descendants, restoration, changed-file rejection, cleanup scope, live stdout/stderr delivery before command completion, process timeouts, and streaming CLI plan/apply. The packaged app check also verifies live pipe output and saving/clearing operation records with isolated fixtures. Real server checks are read-only. No production deletion is part of validation.
+The native validation uses separate temporary CODEX_HOME directories for Codex and Work, creates fixture conversations without model calls, and exercises archive, unarchive, and delete without backup prerequisites. Normal tests cover source filtering, desktop project membership, backup bytes/media/descendants, restoration, changed-file rejection, cleanup scope, live stdout/stderr delivery before command completion, process timeouts, and streaming CLI plan/apply. The packaged app check also verifies Work source filtering, live pipe output, and saving/clearing operation records with isolated fixtures. Real server checks are read-only. No production deletion is part of validation.
 
 SOURCE DIAGNOSTICS
   agent-maintenance diagnose --host all

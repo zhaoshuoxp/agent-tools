@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Inspect, back up, and maintain Codex and Claude conversations across SSH hosts."""
+"""Maintain Codex, local ChatGPT Work, and Claude conversations across SSH hosts."""
 import argparse
 import base64
 import concurrent.futures
@@ -19,7 +19,7 @@ import time
 import zipfile
 import host as maintenance_engine
 
-VERSION = "0.1.3"
+VERSION = "0.1.4"
 ENGINE = Path(__file__).with_name("host.py")
 SSH_OPTIONS = ["-T", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", "-o", "ConnectionAttempts=1",
                "-o", "ClearAllForwardings=yes", "-o", "ForwardAgent=no", "-o", "ControlMaster=no",
@@ -279,6 +279,7 @@ def selected(data, args, expand=False):
 
 def selector(args):
     return {"tool": getattr(args, "tool", "all"), "sessions": getattr(args, "session", None),
+            "surface": getattr(args, "surface", "all"),
             "project": getattr(args, "project", None), "query": getattr(args, "query", ""),
             "archived": getattr(args, "archived", "all"),
             "include_subagents": getattr(args, "include_subagents", False), "all": getattr(args, "all", False)}
@@ -418,6 +419,8 @@ def common(parser, root=False):
 
 def selection_arguments(parser):
     parser.add_argument("--tool", choices=("all", "codex", "claude"), default="all")
+    parser.add_argument("--surface", choices=("all", "codex", "chatgpt-work", "claude"), default="all",
+                        help="Filter the conversation source; ChatGPT Work support covers local desktop records")
     parser.add_argument("--session", action="append", help="Exact conversation UUID; repeat to select several")
     parser.add_argument("--project", help="Exact project name, project ID, or working directory")
     parser.add_argument("--query", default="", help="Filter by title, working directory, or UUID")
@@ -504,7 +507,7 @@ def interactive(args):
         rows = selected(data, args)
         print("\n" + target + ":")
         for number, row in enumerate(rows, 1):
-            print(f"{number:3}. {row['tool']:6} {'archived' if row['archived'] else 'active':8} "
+            print(f"{number:3}. {row.get('surface_label', row['tool']):20} {'archived' if row['archived'] else 'active':8} "
                   f"{size(row['bytes']):>10} {row['title'][:70]} / {row['project']}")
         print("Commands: inspect, projects, backup, archive, unarchive, delete, cleanup, upgrade, refresh, quit")
         operation = input("Action [refresh]: ").strip().lower() or "refresh"
@@ -513,8 +516,9 @@ def interactive(args):
         if operation == "refresh":
             continue
         base = ["--host", target]
+        filters = ["--tool", args.tool, "--surface", args.surface]
         if operation in ("inspect", "projects", "upgrade"):
-            main([operation, *base])
+            main([operation, *base, *(filters if operation != "upgrade" else [])])
             continue
         if operation not in ("backup", "archive", "unarchive", "delete", "cleanup"):
             print("Unknown action")
@@ -532,12 +536,12 @@ def interactive(args):
         if operation == "backup":
             destination = input("New backup ZIP path: ").strip()
             if destination:
-                main(["backup", *base, *scope, "--output", str(Path(destination).expanduser())])
+                main(["backup", *base, *filters, *scope, "--output", str(Path(destination).expanduser())])
             continue
         directory = Path.home() / ".local/state/agent-maintenance/plans"
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
         plan_path = directory / (str(__import__("time").time_ns()) + ".json")
-        if main(["plan", operation, *base, *scope, "--output", str(plan_path)]) != 0:
+        if main(["plan", operation, *base, *filters, *scope, "--output", str(plan_path)]) != 0:
             continue
         reviewed = json.loads(plan_path.read_text())["plan"]
         confirmation = input("Type the full plan ID to apply, or press Enter to cancel: ").strip()
@@ -559,10 +563,10 @@ def output_result(value, args):
                 for item in sorted(host["storage"], key=lambda row: row["bytes"], reverse=True):
                     print(f"  {item['tool']:15} {item['name']:28} {size(item['bytes']):>12}  {item['files']:>7} files")
         elif args.command == "sessions":
-            print(f"{'Host':12} {'Tool':7} {'State':9} {'Size':>11} {'UUID':36} Title / project")
+            print(f"{'Host':12} {'Source':20} {'State':9} {'Size':>11} {'UUID':36} Title / project")
             for host in value["hosts"]:
                 for row in host["sessions"]:
-                    print(f"{host['host']:12} {row['tool']:7} {'archived' if row['archived'] else 'active':9} {size(row['bytes']):>11} {row['id']} {row['title'][:65]} / {row['project']}")
+                    print(f"{host['host']:12} {row.get('surface_label', row['tool']):20} {'archived' if row['archived'] else 'active':9} {size(row['bytes']):>11} {row['id']} {row['title'][:65]} / {row['project']}")
         else:
             print(f"{'Host':12} {'Project':30} {'Chats':>7} {'Transcript size':>17}")
             for row in value["projects"]:
@@ -608,9 +612,11 @@ def main(argv=None):
                         key = (host["host"], row.get("project_id") or row.get("project_path") or row["project"])
                         group = groups.setdefault(key, {"host": host["host"], "project": row["project"],
                                                        "project_id": row.get("project_id"), "project_path": row.get("project_path"),
-                                                       "sessions": 0, "subagents": 0, "bytes": 0})
+                                                       "sessions": 0, "subagents": 0, "bytes": 0, "surfaces": {}})
                         group["subagents" if row.get("is_subagent") else "sessions"] += 1
                         group["bytes"] += row["bytes"]
+                        surface = row.get("surface", row["tool"])
+                        group["surfaces"][surface] = group["surfaces"].get(surface, 0) + 1
                 result["projects"] = sorted(groups.values(), key=lambda row: row["bytes"], reverse=True)
         elif args.command == "backup":
             result = {"backups": [], "failures": []}

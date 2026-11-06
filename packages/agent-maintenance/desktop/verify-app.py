@@ -29,7 +29,7 @@ with tempfile.TemporaryDirectory(prefix="maintenance-app-check-") as temporary:
     old = int(time.time() - 45 * 86400)
     with contextlib.closing(sqlite3.connect(codex / "state_5.sqlite")) as database:
         database.execute("create table projects(id text,title text)")
-        database.execute("create table threads(id text primary key,rollout_path text,created_at integer,updated_at integer,cwd text,title text,source text,archived integer,thread_source text)")
+        database.execute("create table threads(id text primary key,rollout_path text,created_at integer,updated_at integer,cwd text,title text,source text,archived integer,thread_source text,originator text)")
         for number in range(1, 41):
             identifier = "00000000-0000-4000-8000-" + format(number, "012x")
             parent = "00000000-0000-4000-8000-" + format(number - 27, "012x") if number > 27 else None
@@ -37,8 +37,9 @@ with tempfile.TemporaryDirectory(prefix="maintenance-app-check-") as temporary:
             path.parent.mkdir(exist_ok=True)
             path.write_text(json.dumps({"type": "session_meta", "payload": {"id": identifier, "parent_thread_id": parent, "cwd": str(root)}}) + "\n")
             os.utime(path, (old, old))
-            database.execute("insert into threads values(?,?,?,?,?,?,?,?,?)", (identifier, str(path), old, old,
-                             str(root), "Guardian fixture", '{"subagent":{"other":"guardian"}}', 0, "guardian_review"))
+            originator = "codex_work_desktop" if number <= 3 else "Codex Desktop"
+            database.execute("insert into threads values(?,?,?,?,?,?,?,?,?,?)", (identifier, str(path), old, old,
+                             str(root), "Guardian fixture", '{"subagent":{"other":"guardian"}}', 0, "guardian_review", originator))
         database.commit()
     conversation = claude / "projects/example/00000000-0000-4000-8000-000000000099.jsonl"
     conversation.parent.mkdir(parents=True)
@@ -74,9 +75,14 @@ with tempfile.TemporaryDirectory(prefix="maintenance-app-check-") as temporary:
     assert report["codex"]["subagent_records"] == 40, report
     assert report["claude"]["total_records"] == 1, report
     assert report["iconBundled"], report
+    assert report["surfaces"]["chatgpt-work"]["total_records"] == 6, report
+    assert report["surfaces"]["codex"]["total_records"] == 34, report
+    assert report["work_visible_records"] == 3, report
+    assert report["work_native_backend"] == ["codex"], report
     assert report["operation_records"] == "save and clear passed", report
     assert report["live_output"] == "delivered before process exit", report
     print(json.dumps({"app_version": info["CFBundleShortVersionString"], "python": report["python"],
                       "hosts": len(report["hosts"]), "upgrade_targets": len(targets), "codex_records": 40, "default_visible_codex": 27,
-                      "claude_records": 1, "icon_bundled": True, "signature": "passed", "self_check": "passed",
+                      "claude_records": 1, "work_records": 6, "visible_work_records": 3,
+                      "icon_bundled": True, "signature": "passed", "self_check": "passed",
                       "live_output": report["live_output"], "operation_records": report["operation_records"]}, indent=2))

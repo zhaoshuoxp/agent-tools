@@ -29,7 +29,7 @@ Example prompt: `Open SSH connection settings.`
 
 | Tool | Version | Function | Documentation |
 | --- | --- | --- | --- |
-| Agent Maintenance | 0.1.3 | Inspect and back up local or SSH Codex/Claude conversations, manage archives and cleanup, and upgrade agent CLIs with live logs. Includes a Python CLI and native macOS app. | [Agent Maintenance](packages/agent-maintenance/README.md) |
+| Agent Maintenance | 0.1.4 | Manage Codex, local ChatGPT Work, and Claude conversations by project, back up files, manage archives and cleanup, and upgrade agent CLIs with live logs. Includes a Python CLI and native macOS app with SSH support. | [Agent Maintenance](packages/agent-maintenance/README.md) |
 | Codex Radar | 1.0.0 | A macOS desktop widget for RadarBench model scores, category breakdowns, trends, and community ratings from codexradar.com. | [Codex Radar](packages/codexradar/README.md) |
 
 Agent Maintenance uses its own CLI and desktop installers. Download its macOS installer from a successful [Agent Maintenance build](https://github.com/zhaoshuoxp/agent-tools/actions/workflows/agent-maintenance.yml), or run `python3 packages/agent-maintenance/install.py` from this checkout. See its documentation for SSH setup, supported archive behavior, and backup restoration limits.

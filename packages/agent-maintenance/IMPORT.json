@@ -1,6 +1,6 @@
 {
   "name": "Agent Maintenance",
-  "version": "0.1.3",
+  "imported_version": "0.1.3",
   "imported_from": "https://github.com/zhaoshuoxp/agent-speed",
   "source_directory": "tools/agent-maintenance",
   "source_commit": "9809c30c88aec68e55523b7e80f3b2a11e7a0963",

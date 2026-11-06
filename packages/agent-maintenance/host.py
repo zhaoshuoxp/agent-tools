@@ -26,9 +26,18 @@ import zipfile
 from urllib.request import Request, urlopen
 from urllib.error import URLError
 
-VERSION = "0.1.3"
+VERSION = "0.1.4"
 UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.I)
 RECENT_SECONDS = 300
+SURFACE_LABELS = {"codex": "Codex", "chatgpt-work": "ChatGPT Work (local)", "claude": "Claude"}
+
+
+def conversation_surface(row):
+    if row.get("surface"):
+        return row["surface"]
+    if row["tool"] == "codex" and row.get("originator") == "codex_work_desktop":
+        return "chatgpt-work"
+    return row["tool"]
 
 
 def emit_progress(tool, message):
@@ -192,6 +201,35 @@ def state_databases(root):
     return result
 
 
+def apply_desktop_projects(records, root, errors):
+    path = root / ".codex-global-state.json"
+    if not path.is_file():
+        return
+    try:
+        settings = json.loads(path.read_text())
+        projects = settings.get("local-projects", {})
+        if isinstance(projects, list):
+            projects = {entry["id"]: entry for entry in projects if isinstance(entry, dict) and "id" in entry}
+        assignments = settings.get("thread-project-assignments", {})
+        if not isinstance(projects, dict) or not isinstance(assignments, dict):
+            return
+        for row in records:
+            assignment = assignments.get(row["id"], {})
+            if not isinstance(assignment, dict) or assignment.get("projectKind") != "local":
+                continue
+            project_id = assignment.get("projectId")
+            project = projects.get(project_id)
+            if not isinstance(project, dict) or not project.get("name"):
+                continue
+            row["project_id"] = project_id
+            row["project"] = project["name"]
+            folders = project.get("rootPaths", [])
+            if isinstance(folders, list) and folders and isinstance(folders[0], str):
+                row["project_path"] = folders[0]
+    except (OSError, ValueError, AttributeError) as error:
+        errors.append({"path": str(path), "error": "Could not read desktop project metadata: " + str(error)})
+
+
 def scan_codex():
     root = roots()["codex"]
     records, edges, errors, busy = {}, {}, [], set()
@@ -246,6 +284,7 @@ def scan_codex():
                                     "path": str(path), "base": str(root), "database": str(database),
                                     "bytes": info["size"], "disk_bytes": info["disk_bytes"],
                                     "links": info["links"], "source": source,
+                                    "originator": row.get("originator") or "",
                                     "file_modified_at": info["modified_ns"] / 1e9}
         except (OSError, sqlite3.Error) as error:
             errors.append({"path": str(database), "error": str(error)})
@@ -273,7 +312,8 @@ def scan_codex():
                             "is_subagent": bool(edges.get(sid)) or metadata.get("thread_source") in ("subagent", "guardian_review"),
                             "updated_at": info["modified_ns"] / 1e9, "path": str(path),
                             "base": str(root), "database": None, "bytes": info["size"],
-                            "disk_bytes": info["disk_bytes"], "links": info["links"], "source": "unindexed"}
+                            "disk_bytes": info["disk_bytes"], "links": info["links"], "source": "unindexed",
+                            "originator": metadata.get("originator") or ""}
     for history in list(root.glob("thread_history_*.sqlite")) + list((root / "sqlite").glob("thread_history_*.sqlite")):
         try:
             with contextlib.closing(connect(history)) as db:
@@ -287,6 +327,7 @@ def scan_codex():
     for sid, row in records.items():
         row["parent_id"] = row["parent_id"] or edges.get(sid)
         row["busy"] = sid in busy or time.time() - max(row["updated_at"], row.get("file_modified_at", 0)) < RECENT_SECONDS
+    apply_desktop_projects(records.values(), root, errors)
     return list(records.values()), errors
 
 
@@ -395,7 +436,7 @@ def find_cli(tool):
 
 def inventory(include_storage=False, progress=None):
     if progress:
-        progress("codex", "Scanning conversations")
+        progress("codex", "Scanning Codex and local Work conversations")
     codex, errors = scan_codex()
     if progress:
         progress("codex", "Found " + str(len(codex)) + " records")
@@ -415,6 +456,8 @@ def inventory(include_storage=False, progress=None):
         row["project"] = owner["project"]
         row["project_id"] = owner.get("project_id")
         row["project_path"] = owner.get("project_path", owner["cwd"])
+        row["surface"] = conversation_surface(owner)
+        row["surface_label"] = SURFACE_LABELS[row["surface"]]
     children = {}
     for row in records:
         if row["parent_id"]:
@@ -431,6 +474,13 @@ def inventory(include_storage=False, progress=None):
 def diagnostics(data):
     locations = roots()
     result = {"home": str(Path.home()), "hostname": data["hostname"], "errors": data["errors"]}
+    result["surfaces"] = {}
+    for surface, label in SURFACE_LABELS.items():
+        rows = [row for row in data["sessions"] if conversation_surface(row) == surface]
+        result["surfaces"][surface] = {"label": label, "total_records": len(rows),
+                                       "main_records": sum(not row["is_subagent"] for row in rows),
+                                       "visible_records": len(selected_sessions(data, {"surface": surface}, expand=False))}
+    result["work_scope"] = "Local Work records identified by the desktop originator, including descendants. Cloud Work history is not scanned."
     for tool in ("codex", "claude"):
         rows = [row for row in data["sessions"] if row["tool"] == tool]
         visible = selected_sessions(data, {"tool": tool}, expand=False)
@@ -445,6 +495,7 @@ def diagnostics(data):
 
 def selected_sessions(data, selector, expand=True):
     tool = selector.get("tool", "all")
+    surface = selector.get("surface", "all")
     wanted = set(selector.get("sessions") or [])
     project = selector.get("project")
     query = selector.get("query", "").lower()
@@ -453,6 +504,8 @@ def selected_sessions(data, selector, expand=True):
     rows = []
     for row in data["sessions"]:
         if tool != "all" and row["tool"] != tool:
+            continue
+        if surface != "all" and conversation_surface(row) != surface:
             continue
         if wanted and row["id"] not in wanted:
             continue
@@ -556,7 +609,8 @@ def readable_blocks(row):
     title = html.escape(row["title"])
     yield '<!doctype html><meta charset="utf-8"><title>' + title + '</title>'
     yield '<style>body{font:18px/1.6 system-ui;max-width:1000px;margin:40px auto;padding:0 24px}pre{white-space:pre-wrap;overflow-wrap:anywhere}section{border-top:1px solid #bbb;margin-top:24px}</style>'
-    yield '<h1>' + title + '</h1><p>Session: ' + row["id"] + '</p><p>Full tool records and embedded images are preserved in the original transcript. Referenced media is included in the backup.</p>'
+    label = html.escape(row.get("surface_label", row["tool"]))
+    yield '<h1>' + title + '</h1><p>Source: ' + label + '</p><p>Session: ' + row["id"] + '</p><p>Full tool records and embedded images are preserved in the original transcript. Referenced media is included in the backup.</p>'
     path = Path(row["path"])
     if path.suffix != ".jsonl":
         yield '<p>This compressed transcript is preserved as an original file.</p>'
@@ -722,6 +776,14 @@ def make_plan(request, progress=None):
         result["categories"] = request.get("categories") or ["logs", "temp"]
         result["days"] = int(request.get("days", 30))
         result["tool"] = request.get("selector", {}).get("tool", "all")
+        surface = request.get("selector", {}).get("surface", "all")
+        if surface != "all":
+            selected_tool = "codex" if surface in ("codex", "chatgpt-work") else surface
+            if result["tool"] not in ("all", selected_tool):
+                raise ValueError("The selected tool and conversation source conflict")
+            result["tool"] = selected_tool
+        if result["tool"] == "codex":
+            result["scope_note"] = "Codex and local ChatGPT Work share these log and temporary folders."
         result["items"] = cleanup_files(result["categories"], result["days"], result["tool"])
     else:
         selector = request["selector"]
