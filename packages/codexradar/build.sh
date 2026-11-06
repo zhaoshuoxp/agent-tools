@@ -7,13 +7,17 @@ set -euo pipefail
 cd "$(dirname "$0")"
 VERSION="${VERSION:-1.0.0}"
 NAME=CodexRadar
-OUT=build
+OUT="${CODEXRADAR_BUILD_DIR:-build}"
+SDK_PATH="${CODEXRADAR_SDK_PATH:-$(xcrun --sdk macosx --show-sdk-path)}"
+MODULE_CACHE="${CODEXRADAR_MODULE_CACHE_PATH:-$OUT/.module-cache}"
 APP="$OUT/$NAME.app"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+mkdir -p "$MODULE_CACHE"
 
 for arch in arm64 x86_64; do
-  swiftc -O -swift-version 5 -target "$arch-apple-macos14.0" main.swift -o "$OUT/$NAME-$arch" \
+  swiftc -O -swift-version 5 -sdk "$SDK_PATH" -module-cache-path "$MODULE_CACHE" \
+    -target "$arch-apple-macos14.0" main.swift -o "$OUT/$NAME-$arch" \
     -framework AppKit -framework SwiftUI -framework ServiceManagement
 done
 lipo -create "$OUT/$NAME-arm64" "$OUT/$NAME-x86_64" -output "$APP/Contents/MacOS/$NAME"
@@ -21,6 +25,7 @@ rm -f "$OUT/$NAME-arm64" "$OUT/$NAME-x86_64"
 
 [[ -f icon/AppIcon.icns ]] || { swift icon/make_icon.swift icon && iconutil -c icns icon/AppIcon.iconset -o icon/AppIcon.icns && rm -rf icon/AppIcon.iconset; }
 cp icon/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+cp LICENSE "$APP/Contents/Resources/LICENSE"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -39,7 +44,9 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
 PLIST
+xattr -cr "$APP"
 codesign --force -s - "$APP"
+codesign --verify --deep --strict "$APP"
 echo "Built $APP ($VERSION, $(lipo -archs "$APP/Contents/MacOS/$NAME"))"
 
 case "${1:-}" in

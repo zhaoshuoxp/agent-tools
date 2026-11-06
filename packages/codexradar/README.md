@@ -31,7 +31,7 @@ pulled from <a href="https://codexradar.com/?station=codex#intelligence-efficien
 
 ## Install
 
-1. Download `CodexRadar-x.y.z-macOS.zip` from [Releases](../../releases/latest) and unzip it.
+1. Download `CodexRadar-x.y.z-macOS.zip` from [Releases](https://github.com/zhaoshuoxp/agent-tools/releases/tag/codexradar-v1.0.0) and unzip it.
 2. Move **CodexRadar.app** to `/Applications` (or `~/Applications`).
 3. The app is ad-hoc signed, not notarized, so the first launch is blocked by Gatekeeper. Either right-click the app → **Open**, or run:
    ```bash
@@ -67,7 +67,7 @@ Needs only the Xcode Command Line Tools (no Xcode project):
 ./build.sh --zip      # build and create the release zip
 ```
 
-`icon/make_icon.swift` regenerates the app icon.
+`icon/make_icon.swift` regenerates the app icon. Set `CODEXRADAR_BUILD_DIR` to choose an output directory and `CODEXRADAR_SDK_PATH` to select a compatible macOS SDK. The [Codex Radar workflow](https://github.com/zhaoshuoxp/agent-tools/actions/workflows/codexradar.yml) builds and verifies the universal app on GitHub.
 
 ## Data sources
 
@@ -101,7 +101,7 @@ Each watched row is one request per refresh, at most every 5 minutes (30 by defa
 
 **安装**
 
-1. 在 [Releases](../../releases/latest) 下载 zip 并解压。
+1. 在 [Releases](https://github.com/zhaoshuoxp/agent-tools/releases/tag/codexradar-v1.0.0) 下载 zip 并解压。
 2. 把 `CodexRadar.app` 拖到「应用程序」文件夹。
 3. app 没有经过公证，首次打开需要右键 →「打开」，或者执行：
    ```bash

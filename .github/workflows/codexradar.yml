@@ -1,0 +1,59 @@
+name: Codex Radar macOS build
+
+on:
+  push:
+    branches: [main]
+    paths: ['packages/codexradar/**', '.github/workflows/codexradar.yml']
+  pull_request:
+    paths: ['packages/codexradar/**', '.github/workflows/codexradar.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codexradar-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  desktop:
+    runs-on: macos-26
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - name: Select newest stable Xcode
+        run: |
+          xcode="$(ls -d /Applications/Xcode*.app | grep -viE 'beta|_rc|release_candidate' | sort -V | tail -1)"
+          sudo xcode-select -s "$xcode"
+      - name: Build universal app and archive
+        env:
+          CODEXRADAR_BUILD_DIR: ${{ runner.temp }}/codexradar-build
+        run: packages/codexradar/build.sh --zip
+      - name: Verify archive and application metadata
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import os
+          import plistlib
+          import subprocess
+          import zipfile
+          output = Path(os.environ['RUNNER_TEMP']) / 'codexradar-build'
+          app = output / 'CodexRadar.app'
+          subprocess.run(['codesign', '--verify', '--deep', '--strict', str(app)], check=True)
+          architectures = subprocess.check_output(['lipo', '-archs', str(app / 'Contents/MacOS/CodexRadar')], text=True).split()
+          assert set(architectures) == {'arm64', 'x86_64'}, architectures
+          info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
+          assert info['CFBundleIdentifier'] == 'io.github.zhaoshuoxp.CodexRadar'
+          archives = list(output.glob('CodexRadar-*-macOS.zip'))
+          assert len(archives) == 1, archives
+          with zipfile.ZipFile(archives[0]) as archive:
+              assert archive.testzip() is None
+              assert archive.read('CodexRadar.app/Contents/Resources/LICENSE') == Path('packages/codexradar/LICENSE').read_bytes()
+              assert not any(name.startswith('__MACOSX/') for name in archive.namelist())
+          print('Verified universal app, signature, license, and archive.')
+          PY
+      - uses: actions/upload-artifact@v7
+        with:
+          name: CodexRadar-macOS
+          path: ${{ runner.temp }}/codexradar-build/CodexRadar-*-macOS.zip
+          if-no-files-found: error

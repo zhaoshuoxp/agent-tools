@@ -1,0 +1,18 @@
+{
+  "name": "Codex Radar",
+  "version": "1.0.0",
+  "original_repository": "https://github.com/zhaoshuoxp/CodexRadar",
+  "source_commit": "7b7063d5a890c261f1f295691e72ec3810b9852f",
+  "source_commit_url": "https://github.com/zhaoshuoxp/agent-tools/commit/7b7063d5a890c261f1f295691e72ec3810b9852f",
+  "history": "Imported with a Git subtree merge preserving original commits.",
+  "original_tag": "v1.0.0",
+  "release_tag": "codexradar-v1.0.0",
+  "release_source_commit": "34e3596d1c9fa318e89d612f6b5d4906d63bbee1",
+  "release_asset": "CodexRadar-1.0.0-macOS.zip",
+  "release_asset_sha256": "b1d13129014c9517bef53efb96d1111a9cbde3fae5430e55fe78303623dab4ad",
+  "adaptations": [
+    "Updated release and build links for the combined repository.",
+    "Added configurable build output, SDK selection, license packaging, and CI verification."
+  ],
+  "license": "MIT; original notice retained in LICENSE"
+}

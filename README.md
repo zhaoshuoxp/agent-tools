@@ -30,8 +30,11 @@ Example prompt: `Open SSH connection settings.`
 | Tool | Version | Function | Documentation |
 | --- | --- | --- | --- |
 | Agent Maintenance | 0.1.3 | Inspect and back up local or SSH Codex/Claude conversations, manage archives and cleanup, and upgrade agent CLIs with live logs. Includes a Python CLI and native macOS app. | [Agent Maintenance](packages/agent-maintenance/README.md) |
+| Codex Radar | 1.0.0 | A macOS desktop widget for RadarBench model scores, category breakdowns, trends, and community ratings from codexradar.com. | [Codex Radar](packages/codexradar/README.md) |
 
 Agent Maintenance uses its own CLI and desktop installers. Download its macOS installer from a successful [Agent Maintenance build](https://github.com/zhaoshuoxp/agent-tools/actions/workflows/agent-maintenance.yml), or run `python3 packages/agent-maintenance/install.py` from this checkout. See its documentation for SSH setup, supported archive behavior, and backup restoration limits.
+
+Download Codex Radar from its [versioned release](https://github.com/zhaoshuoxp/agent-tools/releases/tag/codexradar-v1.0.0). Its original Git history and released application are preserved in this repository.
 
 ## Plugin requirements
 
@@ -42,7 +45,7 @@ Agent Maintenance uses its own CLI and desktop installers. Download its macOS in
 
 Runtime dependencies are bundled in the committed `dist/` files. Building from source requires npm and access to the npm registry. Account or workspace policies may limit local plugin installation.
 
-## Install
+## Install ChatGPT plugins
 
 Clone the repository into a location you intend to keep:
 
@@ -71,9 +74,9 @@ Keep the checkout in place while its local marketplace is registered. ChatGPT ru
 
 The repository and marketplace display name are Agent Tools. The marketplace ID remains `chatgpt-plugins` so existing plugin installation identifiers continue to work.
 
-Each package retains its original standalone marketplace and `.command` helpers. Those helpers and the package-level installation instructions use the standalone names `chatgpt-usage-local` and `ssh-connections-local`. The commands above use the combined `chatgpt-plugins` catalog. When migrating an existing installation, remove its old standalone entry before installing the same plugin from the combined catalog.
+Each ChatGPT plugin package retains its original standalone marketplace and `.command` helpers. Those helpers and the package-level installation instructions use the standalone names `chatgpt-usage-local` and `ssh-connections-local`. The commands above use the combined `chatgpt-plugins` catalog. When migrating an existing installation, remove its old standalone entry before installing the same plugin from the combined catalog.
 
-## Update and remove
+## Update and remove plugins
 
 From this repository's checkout:
 
@@ -116,6 +119,8 @@ Usage Meter tests use synthetic account responses. To explicitly read the local 
 
 Test Agent Maintenance and build its standalone macOS app using [its package instructions](packages/agent-maintenance/README.md#build-and-test). Its dedicated GitHub workflow tests Python compatibility, builds the app, and uploads the installer artifact.
 
+Build Codex Radar with `packages/codexradar/build.sh --zip`, or use its [dedicated macOS workflow](https://github.com/zhaoshuoxp/agent-tools/actions/workflows/codexradar.yml). See [the source build instructions](packages/codexradar/README.md#build-from-source).
+
 ## Repository layout and future packages
 
 ```text
@@ -124,6 +129,7 @@ packages/
   chatgpt-usage-plugin/            Usage Meter project and standalone catalog
   ssh-connections-local/          SSH Connections project and standalone catalog
   agent-maintenance/              Standalone maintenance CLI and macOS app
+  codexradar/                      Standalone model-information desktop widget
 CONTRIBUTING.md                    How to add and maintain packages
 ```
 
