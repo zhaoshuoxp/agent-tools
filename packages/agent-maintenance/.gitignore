@@ -1,0 +1,12 @@
+.build-cache/
+__pycache__/
+*.pyc
+build/
+dist/
+native-codex-*/
+native-codex-validation.json
+*.zip
+*.sha256
+*.partial
+*.verified.json
+*.log

@@ -1,0 +1,4 @@
+{
+  "hosts": ["server-one", "server-two", "server-three", "server-four", "server-five"],
+  "upgrade_hosts": ["server-one", "server-two", "server-three", "server-four", "server-five"]
+}

@@ -1,0 +1,46 @@
+Agent Maintenance 0.1.3 - Test Distribution
+
+INSTALL ON MACOS
+Quit older copies of Agent Maintenance, extract this complete ZIP, and double-click Install.command. You can also run bash Install.command from Terminal. The installer creates ~/Applications/Agent Maintenance.app and ~/.local/bin/agent-maintenance. Open that exact app path when several copies exist.
+
+Python 3.9+ is supported, including macOS developer-tools Python 3.9.6. The installer and app probe available interpreters and skip incompatible candidates. A separate Python upgrade is not needed when a compatible system Python exists. Python itself is not bundled. The app requires macOS 14+ and supports Intel and Apple Silicon.
+
+The app is an ad-hoc signed development build without Apple notarization. The installer checks package hashes, strips transfer metadata from the packaged app, and verifies its signature. Existing installations are retained in timestamped backups. No conversation maintenance, CLI upgrades, or SSH connection runs during installation.
+
+CHECK THE INSTALLATION
+  ~/.local/bin/agent-maintenance --version
+  ~/.local/bin/agent-maintenance hosts --json
+  ~/.local/bin/agent-maintenance diagnose --host local --json
+
+Version output should be 0.1.3. A previous installation that stopped at the Python check did not create the CLI launcher; run this updated installer to create it.
+
+SSH HOSTS
+Literal Host aliases are discovered from ~/.ssh/config and its Include files. Wildcard and negated patterns are excluded. Existing Agent Speed SSHUsage settings and explicit maintenance host selections take precedence. Select Sources & SSH in the app to review detected hosts, choose aliases, and save the selection. The new computer needs working SSH aliases and key or ssh-agent authentication; background requests cannot display password prompts. This package contains no private keys, login credentials, live SSH configuration, or conversation data.
+
+config.example.json contains the five example aliases server-one, server-two, server-three, server-four, and server-five. Importing it is optional because the app can discover and configure hosts directly. These five aliases are preferred CLI upgrade targets when present. Open Remote CLI maintenance to check both CLIs on the selected servers, choose targets and tools, save the selection, or apply native upgrades. CLI targets are independent of the conversation host. Select This computer explicitly for local checks.
+
+CODEX QR-PAIRED REMOTE
+The independent maintenance app cannot reuse Codex desktop's QR-paired Remote channel. Install and run the CLI on the paired device through its Codex Remote chat; --host local then refers to that device. The maintenance app displays the app computer and record host to identify where operations run.
+
+CODEX RECORDS
+The source summary shows actual data homes and record counts. Local Codex defaults to ~/.codex. Guardian records whose parent conversation is absent remain visible. Include subagents shows every record, and the Kind column identifies subagents. A store containing guardian records only is labeled explicitly. Sources & SSH also allows choosing another local Codex or Claude data home.
+
+Archive and delete request confirmation and use your manual backup policy; neither opens a backup chooser nor requires backup verification. Codex archive uses the native CLI. Claude File archive moves session bundles to ~/.claude-archive and supports moving them back; it does not call Claude Desktop's native Archive. Scanning and backups work without installed agent CLIs; Codex native actions require Codex on the host storing the conversations. restore-files extracts standalone originals and database row exports; native desktop sidebar import from a deleted-conversation backup is not implemented.
+
+OPERATION LOGS AND DIAGNOSTICS
+The main operation log shows live output while commands run and appends timestamped results. Completed summaries are saved in ~/Library/Application Support/AgentMaintenance/operations.log with a bounded history. Clear records removes the saved history and current display. Live output is kept in memory. The Remote CLI maintenance panel has its own live log, which is not saved and clears when the panel closes. Diagnostics contains the configuration JSON and source details.
+
+Visual UI acceptance is pending. The packaged app is checked through its native runtime using Python 3.9, an isolated 40-guardian fixture, a live pipe handshake, and operation-record save/clear checks.
+
+CLI ON MACOS OR LINUX
+  python3 cli/install.py
+  ~/.local/bin/agent-maintenance --version
+  ~/.local/bin/agent-maintenance sessions --host local
+
+See cli/README.txt for full maintenance commands. CLI safety tests use temporary data:
+  cd cli
+  python3 -m unittest -v test_maintenance.py
+
+GITHUB BUILDS
+Python compatibility checks and macOS builds run on GitHub-hosted runners when this package changes or the workflow is started manually. Your Mac does not need to remain powered on for those jobs, and those jobs do not log in to your SSH servers. Download the AgentMaintenance-macOS artifact from a successful run. Rebuilt apps are installed manually.
+https://github.com/zhaoshuoxp/agent-tools/actions/workflows/agent-maintenance.yml

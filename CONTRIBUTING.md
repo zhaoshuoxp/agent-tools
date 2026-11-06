@@ -1,4 +1,10 @@
-# Adding and maintaining plugins
+# Adding and maintaining packages
+
+## Add a standalone tool
+
+Place a complete standalone CLI or desktop project under `packages/<tool-name>/`, retaining its tests, assets, provenance, and license. Document its own requirements, installation, update/removal, and validation commands in an English package README. Add it to the root README's standalone-tools table. Keep runtime caches, personal configuration, and conversation data outside Git. Add an isolated build workflow when the tool produces desktop installers.
+
+Register a package in the shared marketplace only when it includes an installable ChatGPT plugin manifest and runtime. Standalone tools use their own installers.
 
 ## Add a plugin
 

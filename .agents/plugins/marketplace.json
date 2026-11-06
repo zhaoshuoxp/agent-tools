@@ -1,7 +1,7 @@
 {
   "name": "chatgpt-plugins",
   "interface": {
-    "displayName": "ChatGPT Plugins"
+    "displayName": "Agent Tools"
   },
   "plugins": [
     {
